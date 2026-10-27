@@ -3,63 +3,71 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0b6bcb">
+  <meta name="theme-color" content="#071a33">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Brandstof">
-  <title>Brandstoftracker</title>
+  <title>Brandstof</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header><div><span class="eyebrow">MIJN AUTO</span><h1>Brandstoftracker</h1></div><button id="addBtn" class="primary">+ Tankbeurt</button></header>
+  <header class="hero">
+    <div><p class="eyebrow">MIJN AUTO</p><h1>Brandstof</h1></div>
+    <button id="addButton" class="icon-button" aria-label="Tankbeurt toevoegen">＋</button>
+  </header>
+
   <main>
     <section class="stats" aria-label="Overzicht">
-      <article><span>Kilometerstand</span><strong id="kmStat">–</strong></article>
-      <article><span>Laatste verbruik</span><strong id="consumptionStat">–</strong></article>
-      <article><span>Gemiddeld verbruik</span><strong id="averageStat">–</strong></article>
-      <article><span>Tankbeurten</span><strong id="countStat">0</strong></article>
+      <article class="card"><span>Laatste kilometerstand</span><strong id="odometerStat">–</strong></article>
+      <article class="card accent"><span>Laatste verbruik</span><strong id="consumptionStat">–</strong><small id="ratioStat">Voeg twee volle tankbeurten toe</small></article>
     </section>
 
-    <section class="panel">
-      <div class="sectionHead"><div><h2>Tankbeurten</h2><p>Volle én tussentijdse tankbeurten worden correct verwerkt.</p></div></div>
-      <div id="empty" class="empty"><div class="big">⛽</div><h3>Nog geen tankbeurten</h3><p>Voeg eerst een volle tankbeurt toe. Vanaf de volgende volle tank kan het verbruik worden berekend.</p></div>
-      <div id="entries" class="entries"></div>
+    <section class="section-heading"><div><p class="eyebrow">HISTORIE</p><h2>Tankbeurten</h2></div><span id="entryCount" class="badge">0</span></section>
+    <section id="emptyState" class="empty">
+      <div class="empty-icon">⛽</div><h2>Nog geen tankbeurten</h2>
+      <p>Voeg je eerste tankbeurt toe. Na twee volle tankbeurten berekent de app het verbruik.</p>
+      <button class="primary" data-add>Tankbeurt toevoegen</button>
     </section>
-
-    <section class="panel">
-      <h2>Back-up en herstel</h2>
-      <p>Exporteer al je gegevens als JSON-bestand. Dit bestand kun je later op hetzelfde of een ander apparaat importeren.</p>
-      <div class="actions">
-        <button id="backupBtn">Back-up downloaden</button>
-        <label class="button" for="importFile">Back-up importeren</label>
-        <input id="importFile" type="file" accept="application/json,.json" hidden>
-        <button id="csvBtn">CSV voor Excel</button>
-      </div>
-      <p class="note">Bij importeren kun je kiezen tussen samenvoegen en bestaande gegevens vervangen.</p>
-    </section>
+    <section id="entryList" class="entry-list" aria-live="polite"></section>
   </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-active">▤<span>Overzicht</span></button>
+    <button id="backupButton">⇧<span>Backup</span></button>
+  </nav>
 
   <dialog id="entryDialog">
     <form id="entryForm" method="dialog">
-      <div class="dialogHead"><h2 id="formTitle">Nieuwe tankbeurt</h2><button type="button" class="icon" id="closeBtn" aria-label="Sluiten">×</button></div>
-      <input type="hidden" id="entryId">
-      <label>Datum<input id="date" type="date" required></label>
-      <label>Kilometerstand<input id="odometer" type="number" inputmode="numeric" min="1" step="1" placeholder="Bijv. 128450" required></label>
-      <label>Aantal liters<input id="liters" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="Bijv. 42,75" required></label>
-      <label class="toggle"><input id="fullTank" type="checkbox" checked><span>Tank volledig gevuld</span></label>
-      <p id="formError" class="error" role="alert"></p>
-      <div class="dialogActions"><button type="button" id="cancelBtn">Annuleren</button><button class="primary" type="submit">Bewaren</button></div>
+      <header class="modal-header"><button type="button" class="text-button" data-close>Annuleer</button><h2>Nieuwe tankbeurt</h2><button type="submit" class="text-button strong">Bewaar</button></header>
+      <div class="form-body">
+        <label>Datum<input id="date" type="date" required></label>
+        <label>Kilometerstand<input id="odometer" type="number" min="1" step="1" inputmode="numeric" placeholder="bijv. 125400" required></label>
+        <label>Aantal liters<input id="liters" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="bijv. 42,35" required></label>
+        <label class="switch-row"><span><b>Tank volledig gevuld</b><small>Nodig voor de verbruiksberekening</small></span><input id="fullTank" type="checkbox" checked></label>
+        <p id="formError" class="error" role="alert"></p>
+      </div>
     </form>
   </dialog>
 
-  <dialog id="importDialog">
-    <div class="dialogHead"><h2>Back-up importeren</h2><button type="button" class="icon" id="importClose">×</button></div>
-    <p>Wil je de gegevens samenvoegen of alles vervangen?</p>
-    <div class="dialogActions stack"><button id="mergeBtn">Samenvoegen</button><button id="replaceBtn" class="danger">Bestaande gegevens vervangen</button></div>
+  <dialog id="backupDialog">
+    <div class="modal-header"><button type="button" class="text-button" data-close-backup>Sluiten</button><h2>Backup</h2><span></span></div>
+    <div class="form-body backup-actions">
+      <button id="exportJson" class="primary">Backup downloaden (JSON)</button>
+      <button id="exportCsv" class="secondary">Openen in Excel (CSV)</button>
+      <label class="secondary file-label">Backup terugzetten<input id="importJson" type="file" accept="application/json,.json"></label>
+      <p class="hint">Een geïmporteerde backup vervangt de huidige tankbeurten pas nadat je dit bevestigt.</p>
+    </div>
   </dialog>
 
-  <div id="toast" role="status"></div>
-  <script src="app.js"></script>
+  <template id="entryTemplate">
+    <article class="entry">
+      <div class="entry-main"><div class="date-line"><strong class="entry-date"></strong><span class="full-badge">VOL</span></div><p class="entry-details"></p><p class="entry-consumption"></p></div>
+      <button class="delete-button" aria-label="Tankbeurt verwijderen">×</button>
+    </article>
+  </template>
+
+  <script src="app.js" defer></script>
 </body>
 </html>

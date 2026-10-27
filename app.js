@@ -1,25 +1,41 @@
-const KEY='brandstoftracker.entries.v1';
-let entries=load(), pendingImport=[];
-const $=id=>document.getElementById(id);
-function load(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return[]}}
+'use strict';
+const KEY='brandstofApp.entries.v1';
+let entries=loadEntries();
+const $=s=>document.querySelector(s);
+const dialog=$('#entryDialog'), backupDialog=$('#backupDialog'), form=$('#entryForm');
+function loadEntries(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return []}}
 function save(){localStorage.setItem(KEY,JSON.stringify(entries));render()}
-function uid(){return crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random()}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function nl(n,d=2){return Number(n).toLocaleString('nl-NL',{minimumFractionDigits:d,maximumFractionDigits:d})}
-function calc(entry){const sorted=[...entries].sort((a,b)=>a.odometer-b.odometer);const i=sorted.findIndex(x=>x.id===entry.id);if(i<0||!entry.fullTank)return null;let p=-1;for(let x=i-1;x>=0;x--){if(sorted[x].fullTank){p=x;break}}if(p<0)return null;const km=entry.odometer-sorted[p].odometer;if(km<=0)return null;const liters=sorted.slice(p+1,i+1).reduce((s,x)=>s+x.liters,0);return liters/km*100}
-function render(){const sorted=[...entries].sort((a,b)=>new Date(b.date)-new Date(a.date)||b.odometer-a.odometer);$('empty').hidden=entries.length>0;$('entries').hidden=!entries.length;$('countStat').textContent=entries.length;const latest=[...entries].sort((a,b)=>b.odometer-a.odometer)[0];$('kmStat').textContent=latest?latest.odometer.toLocaleString('nl-NL')+' km':'–';const vals=entries.map(calc).filter(x=>x!==null);$('consumptionStat').textContent=vals.length?nl(vals.at(-1))+' L/100 km':'–';$('averageStat').textContent=vals.length?nl(vals.reduce((a,b)=>a+b,0)/vals.length)+' L/100 km':'–';$('entries').innerHTML=sorted.map(e=>{const c=calc(e);return `<article class="entry"><div><h3>${new Date(e.date+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})} ${e.fullTank?'<span class="badge">Vol</span>':''}</h3><div class="meta">${e.odometer.toLocaleString('nl-NL')} km · ${nl(e.liters)} liter</div>${c!==null?`<div class="result">${nl(c)} L/100 km · 1 op ${nl(100/c,1)}</div>`:'<div class="meta">Verbruik nog niet berekenbaar</div>'}</div><div class="entryActions"><button class="small" onclick="editEntry('${esc(e.id)}')">Wijzig</button><button class="small delete" onclick="deleteEntry('${esc(e.id)}')">Wis</button></div></article>`}).join('')}
-function openNew(){ $('entryForm').reset();$('entryId').value='';$('date').value=new Date().toISOString().slice(0,10);$('fullTank').checked=true;$('formTitle').textContent='Nieuwe tankbeurt';$('formError').textContent='';$('entryDialog').showModal()}
-window.editEntry=id=>{const e=entries.find(x=>x.id===id);if(!e)return;$('entryId').value=e.id;$('date').value=e.date;$('odometer').value=e.odometer;$('liters').value=e.liters;$('fullTank').checked=e.fullTank;$('formTitle').textContent='Tankbeurt wijzigen';$('formError').textContent='';$('entryDialog').showModal()}
-window.deleteEntry=id=>{if(confirm('Deze tankbeurt verwijderen?')){entries=entries.filter(e=>e.id!==id);save();toast('Tankbeurt verwijderd')}}
-$('entryForm').addEventListener('submit',e=>{e.preventDefault();const id=$('entryId').value,odometer=Number($('odometer').value),liters=Number($('liters').value);if(!odometer||!liters||liters<=0){$('formError').textContent='Vul een geldige kilometerstand en hoeveelheid liters in.';return}const duplicate=entries.find(x=>x.odometer===odometer&&x.id!==id);if(duplicate){$('formError').textContent='Er bestaat al een tankbeurt met deze kilometerstand.';return}const item={id:id||uid(),date:$('date').value,odometer,liters,fullTank:$('fullTank').checked};entries=id?entries.map(x=>x.id===id?item:x):[...entries,item];save();$('entryDialog').close();toast('Tankbeurt bewaard')})
-$('addBtn').onclick=openNew;$('closeBtn').onclick=$('cancelBtn').onclick=()=>$('entryDialog').close();
-function download(name,type,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-$('backupBtn').onclick=()=>{const payload={app:'Brandstoftracker',version:1,exportedAt:new Date().toISOString(),entries};download(`brandstof-backup-${new Date().toISOString().slice(0,10)}.json`,'application/json',JSON.stringify(payload,null,2));toast('Back-up gedownload')}
-$('csvBtn').onclick=()=>{const rows=[['Datum','Kilometerstand','Liters','Volgetankt','L_per_100km','Een_op']];[...entries].sort((a,b)=>a.odometer-b.odometer).forEach(e=>{const c=calc(e);rows.push([e.date,e.odometer,String(e.liters).replace('.',','),e.fullTank?'Ja':'Nee',c===null?'':nl(c),c===null?'':nl(100/c,1)])});const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n');download(`brandstof-${new Date().toISOString().slice(0,10)}.csv`,'text/csv;charset=utf-8',csv);toast('CSV gedownload')}
-$('importFile').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());const list=Array.isArray(data)?data:data.entries;if(!Array.isArray(list)||!list.every(x=>x.date&&Number(x.odometer)>0&&Number(x.liters)>0))throw Error();pendingImport=list.map(x=>({id:x.id||uid(),date:x.date,odometer:Number(x.odometer),liters:Number(x.liters),fullTank:Boolean(x.fullTank)}));$('importDialog').showModal()}catch{alert('Dit bestand is geen geldige Brandstoftracker-back-up.')}finally{e.target.value=''}}
-$('mergeBtn').onclick=()=>{const map=new Map(entries.map(x=>[x.id,x]));pendingImport.forEach(x=>map.set(x.id,x));entries=[...map.values()];save();$('importDialog').close();toast('Back-up samengevoegd')}
-$('replaceBtn').onclick=()=>{if(confirm('Alle huidige gegevens vervangen door de back-up?')){entries=pendingImport;save();$('importDialog').close();toast('Back-up hersteld')}}
-$('importClose').onclick=()=>$('importDialog').close();
-function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}
-render();
+function calculations(){
+ const ordered=[...entries].sort((a,b)=>a.odometer-b.odometer);
+ const result=new Map();
+ ordered.forEach((e,i)=>{
+  if(!e.fullTank)return;
+  let p=i-1;while(p>=0&&!ordered[p].fullTank)p--;
+  if(p<0)return;
+  const km=e.odometer-ordered[p].odometer;
+  const liters=ordered.slice(p+1,i+1).reduce((sum,x)=>sum+x.liters,0);
+  if(km>0)result.set(e.id,liters/km*100);
+ });return result;
+}
+function formatDate(value){return new Intl.DateTimeFormat('nl-NL',{day:'numeric',month:'long',year:'numeric'}).format(new Date(value+'T12:00:00'))}
+function render(){
+ const calc=calculations(), sorted=[...entries].sort((a,b)=>b.date.localeCompare(a.date)||b.odometer-a.odometer);
+ $('#entryCount').textContent=entries.length; $('#emptyState').hidden=entries.length>0; $('#entryList').innerHTML='';
+ const latest=[...entries].sort((a,b)=>b.odometer-a.odometer)[0];
+ $('#odometerStat').textContent=latest?`${latest.odometer.toLocaleString('nl-NL')} km`:'–';
+ const recent=[...entries].sort((a,b)=>b.odometer-a.odometer).find(e=>calc.has(e.id));
+ if(recent){const v=calc.get(recent.id);$('#consumptionStat').textContent=`${v.toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2})} L/100 km`;$('#ratioStat').textContent=`1 op ${(100/v).toLocaleString('nl-NL',{maximumFractionDigits:1})}`}
+ else{$('#consumptionStat').textContent='–';$('#ratioStat').textContent='Voeg twee volle tankbeurten toe'}
+ sorted.forEach(e=>{const node=$('#entryTemplate').content.cloneNode(true);node.querySelector('.entry-date').textContent=formatDate(e.date);node.querySelector('.entry-details').textContent=`${e.odometer.toLocaleString('nl-NL')} km • ${e.liters.toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2})} liter`;if(!e.fullTank)node.querySelector('.full-badge').classList.add('hidden');const v=calc.get(e.id);node.querySelector('.entry-consumption').textContent=v?`${v.toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2})} L/100 km • 1 op ${(100/v).toLocaleString('nl-NL',{maximumFractionDigits:1})}`:e.fullTank?'Verbruik nog niet berekenbaar':'Tussentijdse tankbeurt';node.querySelector('.delete-button').onclick=()=>{if(confirm('Deze tankbeurt verwijderen?')){entries=entries.filter(x=>x.id!==e.id);save()}};$('#entryList').append(node)});
+}
+function openAdd(){form.reset();$('#fullTank').checked=true;$('#date').value=new Date().toISOString().slice(0,10);$('#formError').textContent='';dialog.showModal()}
+$('#addButton').onclick=openAdd;document.querySelectorAll('[data-add]').forEach(x=>x.onclick=openAdd);document.querySelector('[data-close]').onclick=()=>dialog.close();
+form.onsubmit=e=>{e.preventDefault();const odometer=Number($('#odometer').value),liters=Number($('#liters').value);const max=entries.reduce((m,x)=>Math.max(m,x.odometer),0);if(!odometer||!liters){$('#formError').textContent='Vul de kilometerstand en het aantal liters in.';return}if(odometer<=max){$('#formError').textContent=`De kilometerstand moet hoger zijn dan ${max.toLocaleString('nl-NL')} km.`;return}entries.push({id:crypto.randomUUID(),date:$('#date').value,odometer,liters,fullTank:$('#fullTank').checked});save();dialog.close()};
+$('#backupButton').onclick=()=>backupDialog.showModal();document.querySelector('[data-close-backup]').onclick=()=>backupDialog.close();
+function download(name,type,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+$('#exportJson').onclick=()=>download(`brandstof-backup-${new Date().toISOString().slice(0,10)}.json`,'application/json',JSON.stringify({version:1,exportedAt:new Date().toISOString(),entries},null,2));
+$('#exportCsv').onclick=()=>{const calc=calculations();const rows=[['datum','kilometerstand','liters','volgetankt','liter_per_100km'],...[...entries].sort((a,b)=>a.odometer-b.odometer).map(e=>[e.date,e.odometer,String(e.liters).replace('.',','),e.fullTank?'ja':'nee',calc.has(e.id)?calc.get(e.id).toFixed(2).replace('.',','):''])];download('brandstof-tankbeurten.csv','text/csv;charset=utf-8','\ufeff'+rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(';')).join('\n'))};
+$('#importJson').onchange=async e=>{try{const parsed=JSON.parse(await e.target.files[0].text());const incoming=Array.isArray(parsed)?parsed:parsed.entries;if(!Array.isArray(incoming)||!incoming.every(x=>x.date&&Number.isFinite(Number(x.odometer))&&Number.isFinite(Number(x.liters))))throw Error();if(confirm(`${incoming.length} tankbeurt(en) importeren en de huidige gegevens vervangen?`)){entries=incoming.map(x=>({id:x.id||crypto.randomUUID(),date:x.date,odometer:Number(x.odometer),liters:Number(x.liters),fullTank:Boolean(x.fullTank)}));save();backupDialog.close()}}catch{alert('Dit bestand is geen geldige backup van de Brandstof-app.')}finally{e.target.value=''}};
 if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));
+render();
